@@ -1017,31 +1017,51 @@ table.results-table th { background: #f1f5f9; color: var(--main); font-weight: 8
     }
 
     // --- منطق عرض النتائج في الأدمن ---
-    window.loadStudentResults = async () => {
+        window.loadStudentResults = async () => {
         const tbody = document.getElementById('results-body');
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">جاري تحميل النتائج...</td></tr>';
+        
         try {
             const snap = await getDocs(collection(db, "results"));
+            
+            if (snap.empty) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">لا توجد نتائج مسجلة بعد.</td></tr>';
+                return;
+            }
+
             let html = '';
-            // ترتيب النتائج حسب التاريخ (الأحدث أولاً)
-            const sortedDocs = snap.docs.sort((a,b) => {
-                 // محاولة تحويل التاريخ لمقارنة بسيطة
-                 return b.data().date.localeCompare(a.data().date);
+            
+            // هذا الترتيب الجديد يمنع الخطأ لو التاريخ ناقص
+            const sortedDocs = snap.docs.sort((a, b) => {
+                const dateA = a.data().date || ""; 
+                const dateB = b.data().date || "";
+                return dateB.localeCompare(dateA);
             });
+
             sortedDocs.forEach(d => {
                 const r = d.data();
-                const gradeTxt = gradeNames[r.grade] || r.grade;
-                const color = (r.score / r.total) >= 0.7 ? '#2ecc71' : '#e74c3c';
+                // حماية إضافية ضد البيانات الناقصة
+                const gradeTxt = gradeNames[r.grade] || r.grade || "-";
+                const scoreVal = r.score !== undefined ? r.score : 0;
+                const totalVal = r.total !== undefined ? r.total : 0;
+                
+                const color = (totalVal > 0 && (scoreVal / totalVal) >= 0.7) ? '#2ecc71' : '#e74c3c';
+                
                 html += `<tr style="border-bottom:1px solid #eee; text-align:center;">
-                        <td style="padding:10px; font-size:12px; color:#666;">${r.date}</td>
-                        <td style="padding:10px; font-weight:bold;">${r.name}</td>
+                        <td style="padding:10px; font-size:12px; color:#666;">${r.date || "غير مسجل"}</td>
+                        <td style="padding:10px; font-weight:bold;">${r.name || "مجهول"}</td>
                         <td style="padding:10px;">${gradeTxt}</td>
-                        <td style="padding:10px;">${r.examType}</td>
-                        <td style="padding:10px; font-weight:bold; color:${color};">${r.score} / ${r.total}</td>
+                        <td style="padding:10px;">${r.examType || "اختبار"}</td>
+                        <td style="padding:10px; font-weight:bold; color:${color};">${scoreVal} / ${totalVal}</td>
                     </tr>`;
             });
-            tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center; padding:20px;">لا توجد نتائج مسجلة بعد.</td></tr>';
-        } catch(e) { console.error(e); tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">خطأ في جلب البيانات</td></tr>'; }
+            
+            tbody.innerHTML = html;
+
+        } catch(e) { 
+            console.error(e); 
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">حدث خطأ: ${e.message}</td></tr>`; 
+        }
     };
 
     window.clearResults = async () => {
